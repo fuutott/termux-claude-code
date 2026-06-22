@@ -114,7 +114,11 @@ npm install -g @anthropic-ai/claude-code --force || echo -e "${RED}Could not ins
 
 echo -e "${YELLOW}Installing native binary for ${BLUE}claude${YELLOW}.${NC}"
 sleep 2
-URL=$(npm view @anthropic-ai/claude-code-linux-arm64 dist.tarball)
+# Pinned to the last known-good build: >= 2.1.185 segfaults under the bundled Bun
+# on this glibc layer. Bump PIN_VERSION (or set it empty for latest) once a newer
+# build is confirmed working. The wrapper's auto-update is OFF by default to match.
+PIN_VERSION="2.1.179"
+URL=$(npm view "@anthropic-ai/claude-code-linux-arm64${PIN_VERSION:+@$PIN_VERSION}" dist.tarball)
 
 if [ -z "$URL" ]; then
     echo -e "${RED}Error: Cannot get URL. Check your internet connection.${NC}"
@@ -132,11 +136,21 @@ rm claude-code-linux-arm64-*.tgz
 
 cat << 'EOF' > /data/data/com.termux/files/usr/bin/claude
 #!/data/data/com.termux/files/usr/bin/bash
+# Termux launcher: runs the native Claude Code arm64 binary under glibc-runner.
+#
+# Auto-update defaults to OFF. The latest published build (>= 2.1.185) segfaults
+# under the bundled Bun on this glibc layer; 2.1.179 is the last known-good pin.
+# To try a newer build:  CLAUDE_SKIP_UPDATE=0 claude
+# glibc-runner is already "$@"-quoting-patched, so a single exec handles all args.
 
 PACKAGE="@anthropic-ai/claude-code-linux-arm64"
 INSTALL_DIR="/data/data/com.termux/files/usr/lib/node_modules/$PACKAGE"
 PACKAGE_JSON="$INSTALL_DIR/package.json"
 BINARY_PATH="$INSTALL_DIR/claude"
+
+# Make every Bash-tool shell Claude spawns source the grep/find shim fix, so its
+# injected grep()/find() functions don't try to exec ld.so as a binary.
+export BASH_ENV="/data/data/com.termux/files/usr/etc/claude-bash-shim-fix.sh"
 
 if [ ! -f "$BINARY_PATH" ]; then
     echo "Claude binary not found at $BINARY_PATH"
@@ -144,27 +158,17 @@ if [ ! -f "$BINARY_PATH" ]; then
     exit 1
 fi
 
-SKIP_UPDATE=0
-REAL_ARGS=()
-
-for arg in "$@"; do
-    if [ "$arg" = "-p" ] || [ "$arg" = "--print" ]; then
-        SKIP_UPDATE=1
-    else
-        REAL_ARGS+=("$arg")
-    fi
-done
+# OFF by default (pin is known-good; latest segfaults). Override: CLAUDE_SKIP_UPDATE=0
+SKIP_UPDATE="${CLAUDE_SKIP_UPDATE:-1}"
 
 if [ "$SKIP_UPDATE" != 1 ]; then
     echo -n "Checking for updates... "
     LATEST_VERSION=$(npm view "$PACKAGE" version 2>/dev/null)
-
     if [ -f "$PACKAGE_JSON" ]; then
         INSTALLED_VERSION=$(grep '"version":' "$PACKAGE_JSON" | head -1 | cut -d'"' -f4)
     else
         INSTALLED_VERSION="none"
     fi
-
     if [ "$LATEST_VERSION" != "$INSTALLED_VERSION" ] && [ -n "$LATEST_VERSION" ]; then
         echo -e "\nNew version ($LATEST_VERSION) found. Updating..."
         URL=$(npm view "$PACKAGE" dist.tarball 2>/dev/null)
@@ -185,30 +189,7 @@ if [ "$SKIP_UPDATE" != 1 ]; then
     fi
 fi
 
-if [ "$SKIP_UPDATE" = 1 ]; then
-    if [ -t 0 ] && [ ${#REAL_ARGS[@]} -eq 0 ]; then
-        glibc-runner "$BINARY_PATH"
-    elif [ -t 0 ] && [ ${#REAL_ARGS[@]} -gt 0 ]; then
-        IS_INTERACTIVE=1
-        for r_arg in "${REAL_ARGS[@]}"; do
-            case "$r_arg" in
-                config|doctor|mcp|--help|-h|--version|-v)
-                    IS_INTERACTIVE=0
-                    break
-                    ;;
-            esac
-        done
-        if [ "$IS_INTERACTIVE" -eq 1 ]; then
-            glibc-runner "$BINARY_PATH" "${REAL_ARGS[@]}"
-        else
-            glibc-runner "$BINARY_PATH" "$@"
-        fi
-    else
-        glibc-runner "$BINARY_PATH" "$@"
-    fi
-else
-    glibc-runner "$BINARY_PATH" "$@"
-fi
+exec glibc-runner "$BINARY_PATH" "$@"
 EOF
 
 chmod +x "$PREFIX/bin/claude"
@@ -225,5 +206,5 @@ SHIMFIX_EOF
 
 echo -e "${GREEN}=== INSTALLATION COMPLETE ===${NC}"
 echo -e "${YELLOW}Run with: ${BLUE}claude${NC}"
-echo -e "${YELLOW}Update checks are on${NC} (skip with ${BLUE}claude -p${NC}; set ${BLUE}CLAUDE_SKIP_UPDATE=1${NC} to always skip)."
-echo -e "Every time you type ${BLUE}claude${NC}, it will check for updates and run natively."
+echo -e "${YELLOW}Auto-update is OFF${NC} (pinned to ${BLUE}${PIN_VERSION:-latest}${NC}; latest segfaults under Bun)."
+echo -e "To try a newer build later: ${BLUE}CLAUDE_SKIP_UPDATE=0 claude${NC}"
