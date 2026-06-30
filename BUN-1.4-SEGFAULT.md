@@ -3,6 +3,13 @@
 Investigation log, 2026-06-22. Device: Samsung Fold6, Termux + glibc-runner,
 Linux kernel 6.6.98-android15, glibc 2.42, aarch64.
 
+> **RESOLVED upstream (re-checked 2026-06-30).** The startup segfault is FIXED as
+> of **2.1.191** — every build since (`.191 .193 .195 .196`) survives interactive
+> init in the pty smoke test; `.190` and earlier in the broken range still crash.
+> So the bad range was **2.1.181 .. 2.1.190** (Bun 1.4.0), good again from 2.1.191.
+> `install.sh` pin bumped to 2.1.196; promote on this box with `./try-upgrade.sh`.
+> The "future hardware repro" plan below is now moot unless it regresses again.
+
 ## TL;DR
 
 - Claude Code's native build **>= 2.1.181 segfaults at startup** on this setup.

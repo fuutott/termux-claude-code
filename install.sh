@@ -114,10 +114,11 @@ npm install -g @anthropic-ai/claude-code --force || echo -e "${RED}Could not ins
 
 echo -e "${YELLOW}Installing native binary for ${BLUE}claude${YELLOW}.${NC}"
 sleep 2
-# Pinned to the last known-good build: >= 2.1.185 segfaults under the bundled Bun
-# on this glibc layer. Bump PIN_VERSION (or set it empty for latest) once a newer
-# build is confirmed working. The wrapper's auto-update is OFF by default to match.
-PIN_VERSION="2.1.179"
+# Builds 2.1.181..2.1.190 segfaulted under the bundled Bun 1.4.0 on this glibc
+# layer; FIXED in 2.1.191 (all builds since survive startup). Pinned to a known
+# good recent build. Set PIN_VERSION empty for latest, or bump it as new builds
+# are confirmed by try-upgrade.sh. The wrapper's auto-update is OFF by default.
+PIN_VERSION="2.1.196"
 URL=$(npm view "@anthropic-ai/claude-code-linux-arm64${PIN_VERSION:+@$PIN_VERSION}" dist.tarball)
 
 if [ -z "$URL" ]; then
@@ -206,5 +207,6 @@ SHIMFIX_EOF
 
 echo -e "${GREEN}=== INSTALLATION COMPLETE ===${NC}"
 echo -e "${YELLOW}Run with: ${BLUE}claude${NC}"
-echo -e "${YELLOW}Auto-update is OFF${NC} (pinned to ${BLUE}${PIN_VERSION:-latest}${NC}; latest segfaults under Bun)."
-echo -e "To try a newer build later: ${BLUE}CLAUDE_SKIP_UPDATE=0 claude${NC}"
+echo -e "${YELLOW}Auto-update is OFF${NC} (pinned to ${BLUE}${PIN_VERSION:-latest}${NC})."
+echo -e "Test/promote a newer build safely with: ${BLUE}./try-upgrade.sh${NC}"
+echo -e "Or ride latest each launch with: ${BLUE}CLAUDE_SKIP_UPDATE=0 claude${NC}"
